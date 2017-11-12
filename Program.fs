@@ -79,16 +79,28 @@ let LSCM (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (t
 let main argv = 
     use file = CvInvoke.Imread(@"C:\Users\vlj\Desktop\height_map_norway-height-map-aster-30m.png")
 
-    let size = 10
+    let size = 30
     let vertex_to_idx i j = i + size * j
     let triangle_to_idx i j = i + (size - 1) * j
     let triangle_count = (size - 1) * (size - 1) * 4
 
+    use bmp = file.Bitmap
+
+    let step_x = float(bmp.Width - 10) / float(size)
+    let step_y = float(bmp.Height - 10) / float(size)
+
     let idx_to_vertex = (function idx -> (idx / size, idx % size))
     let idx_to_triangle = (function idx-> (idx / (size - 1), idx % (size - 1)))
-    let get_height x y = let c = file.Bitmap.GetPixel(int(x), int(y)) in float(c.GetBrightness()) * 200.
-    let get_points (i,j) = let x, y = float(i) * 100. + 10., float(j) * 100. + 10. in Vector3D(x, y, get_height x y)
-    let get_middle (i,j) = let x, y = float(i) * 100. + 60., float(j) * 100. + 60. in Vector3D(x, y, get_height x y)
+    let get_height _x _y =
+        let x, y = int(round _x), int(round _y)
+        let c = bmp.GetPixel(x, y)
+        float(c.GetBrightness()) * 300.
+    let get_points (i,j) =
+        let x, y = float(i) * step_x, float(j) * step_y
+        Vector3D(x, y, get_height x y)
+    let get_middle (i,j) =
+        let x, y = (float(i) + 0.5) * step_x, (float(j) + 0.5) * step_y
+        Vector3D(x, y, get_height x y)
 
     let square = Array.init (size * size) (idx_to_vertex >> get_points)
     let middles = Array.init ((size - 1) * (size - 1)) (idx_to_triangle >> get_middle)
@@ -112,13 +124,13 @@ let main argv =
 
     let pinned_val = dict[
         for i in 0..(size - 1) do
-            yield (vertex_to_idx i 0, Vector2D(0., float(i) * 100.))
+            yield (vertex_to_idx i 0, Vector2D(0., float(i) * step_y))
         for i in 0..(size - 1) do
-            yield (vertex_to_idx i (size - 1), Vector2D(900., float(i) * 100.))
+            yield (vertex_to_idx i (size - 1), Vector2D(step_x * float(size), float(i) * step_y))
         for i in 1..(size - 2) do
-            yield (vertex_to_idx 0 i, Vector2D(float(i) * 100., 0.))
+            yield (vertex_to_idx 0 i, Vector2D(float(i) * step_x, 0.))
         for i in 1..(size - 2) do
-            yield (vertex_to_idx (size - 1) i, Vector2D(float(i) * 100., 900.))
+            yield (vertex_to_idx (size - 1) i, Vector2D(float(i) * step_x, step_y * float(size)))
         ]
 
 
