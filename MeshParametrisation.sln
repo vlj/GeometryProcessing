@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 15
+VisualStudioVersion = 15.0.27004.2008
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "MeshParametrisation", "MeshParametrisation.fsproj", "{806B2D5F-84C5-4983-86DD-83F54BD0F797}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{806B2D5F-84C5-4983-86DD-83F54BD0F797}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{806B2D5F-84C5-4983-86DD-83F54BD0F797}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{806B2D5F-84C5-4983-86DD-83F54BD0F797}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{806B2D5F-84C5-4983-86DD-83F54BD0F797}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {030553E8-D7AD-4D4C-81CF-BFBBC639B219}
+	EndGlobalSection
+EndGlobal
