@@ -31,14 +31,6 @@ let LSCM (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (t
         let W3 = Complex(p2.X - p1.X, p2.Y - p1.Y) / sdT
         (W1, W2, W3)
 
-    let C_matrix = CreateMatrix.Dense<Complex>(triangles.Length, points.Length)
-    Seq.iteri (fun triangle_idx triangle ->
-        let (W1, W2, W3) = coeff ((Array.map (function x -> points.[x]) >> project) triangle)
-        let col_idx idx = triangle.[idx]
-        C_matrix.[triangle_idx, col_idx 0] <- W1
-        C_matrix.[triangle_idx, col_idx 1] <- W2
-        C_matrix.[triangle_idx, col_idx 2] <- W3) triangles
-
     let pinned_vector = CreateVector.Dense<Complex> (border_point.Count)
     let start_of_fixed = points.Length - border_point.Count
 
@@ -55,12 +47,23 @@ let LSCM (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (t
         if not (border_point.ContainsKey i) then 
             dic.[i] <- !next_free_idx
             incr next_free_idx
-    C_matrix.PermuteColumns( Permutation(dic))
 
-    let freemat = Seq.fold (fun (s:Matrix<Complex>) i -> s.RemoveColumn i) C_matrix {(points.Length - 1) ..(-1)..start_of_fixed}
-    let pinmat = Seq.fold (fun (s:Matrix<Complex>) i -> s.RemoveColumn i) C_matrix {(start_of_fixed - 1)..(-1)..0}
+    let get_freemat_pinmat () =
+        let C_matrix = CreateMatrix.Dense<Complex>(triangles.Length, points.Length)
+        Seq.iteri (fun triangle_idx triangle ->
+            let (W1, W2, W3) = coeff ((Array.map (function x -> points.[x]) >> project) triangle)
+            let col_idx idx = triangle.[idx]
+            C_matrix.[triangle_idx, col_idx 0] <- W1
+            C_matrix.[triangle_idx, col_idx 1] <- W2
+            C_matrix.[triangle_idx, col_idx 2] <- W3) triangles
+        C_matrix.PermuteColumns( Permutation(dic))
+        let arr = C_matrix.ToColumnArrays ()
+        let freemat = CreateMatrix.DenseOfColumnArrays arr.[0..start_of_fixed - 1]
+        let pinmat = CreateMatrix.DenseOfColumnArrays arr.[start_of_fixed..arr.Length - 1]
+        freemat, pinmat
 
-    let bb = -pinmat.Multiply(pinned_vector)
+    let freemat, pinmat = get_freemat_pinmat()
+    let bb = pinmat.Multiply(-pinned_vector)
     let uvs = freemat.Solve(bb)
 
     let to_points (v:Complex) = Point(int(v.Real), int(v.Imaginary))
@@ -79,7 +82,7 @@ let LSCM (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (t
 let main argv = 
     use file = CvInvoke.Imread(@"C:\Users\vlj\Desktop\height_map_norway-height-map-aster-30m.png")
 
-    let size = 30
+    let size = 35
     let vertex_to_idx i j = i + size * j
     let triangle_to_idx i j = i + (size - 1) * j
     let triangle_count = (size - 1) * (size - 1) * 4
