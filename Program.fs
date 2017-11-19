@@ -115,8 +115,8 @@ let LSCM (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (t
             let col_idx idx = (t.GetIndexes ()).[idx]
             C_matrix.[triangle_idx, col_idx 0] <- W1
             C_matrix.[triangle_idx, col_idx 1] <- W2
-            C_matrix.[triangle_idx, col_idx 2] <- W3) 
-        C_matrix.PermuteColumns( Permutation(dic))
+            C_matrix.[triangle_idx, col_idx 2] <- W3)
+        C_matrix.PermuteColumns(Permutation(dic))
         let freemat = C_matrix.[0.., ..start_of_fixed - 1]
         let pinmat = C_matrix.[0.., start_of_fixed..]
         freemat, pinmat
@@ -145,7 +145,10 @@ let arap (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (t
 
     let weights =
         let w = [| for p in points -> ([]: (int * Vector<float> * float) list)|]
-        let insert_or_sum k v = w.[k] <- v :: w.[k]
+        let insert_or_sum k v =
+            let aux = w.[k] |> List.exists (function (o, _, _) -> let (o2, _, _) = v in o = o2)
+            //if aux then failwith "not ok"
+            w.[k] <- v :: w.[k]
         for t in triangles do
             let [|i0; i1; i2|] = t.GetIndexes ()
             let cotan = t.GetCotangent points
@@ -153,12 +156,20 @@ let arap (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (t
             let x0x1 = (x1 - x0).ToVector ()
             let x1x2 = (x2 - x1).ToVector ()
             let x2x0 = (x0 - x2).ToVector ()
-            insert_or_sum i1 (i2, x1x2, cotan.[0])
-            insert_or_sum i2 (i1, -x1x2, cotan.[0])
-            insert_or_sum i0 (i2, -x2x0, cotan.[1])
-            insert_or_sum i2 (i0, x2x0, cotan.[1])
-            insert_or_sum i0 (i1, x0x1, cotan.[2])
-            insert_or_sum i1 (i0, -x0x1, cotan.[2])
+            let zero = CreateVector.Dense<float>(2)
+            insert_or_sum i1 (i2, x1x2, cotan.[0] / 2.)
+            insert_or_sum i2 (i1, -x1x2, cotan.[0] / 2.)
+            insert_or_sum i0 (i2, -x2x0, cotan.[1] / 2.)
+            insert_or_sum i2 (i0, x2x0, cotan.[1] / 2.)
+            insert_or_sum i0 (i1, x0x1, cotan.[2] / 2.)
+            insert_or_sum i1 (i0, -x0x1, cotan.[2] / 2.)
+
+            insert_or_sum i1 (i1, zero, -cotan.[0] / 2.)
+            insert_or_sum i2 (i2, zero, -cotan.[0] / 2.)
+            insert_or_sum i0 (i0, zero, -cotan.[1] / 2.)
+            insert_or_sum i2 (i2, zero, -cotan.[1] / 2.)
+            insert_or_sum i0 (i0, zero, -cotan.[2] / 2.)
+            insert_or_sum i1 (i1, zero, -cotan.[2] / 2.)
         w
 
     let energy i (current_uv: Vector2D array) =
@@ -193,32 +204,36 @@ let arap (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (t
         L.PermuteRows(Permutation(map))
         L
 
+    printfn "WeightMatrix : %A" (WeightMatrix.ToString ())
+
     let laplacian =
         -1. * WeightMatrix.[.. start_of_fixed - 1, .. start_of_fixed - 1]
+
+    printfn "Laplacian : %A" (laplacian.ToString ())
 
     let rhs =
         let r = WeightMatrix.[.. start_of_fixed - 1, start_of_fixed..] * pinned_vector2
         let add i j (half_edge:Vector<float>) w (R: Matrix<float> array) =
-            let M = (R.[i] - R.[j]).Multiply(half_edge)
+            let M = (R.[i] - R.[j]).TransposeThisAndMultiply(half_edge)
             w / 2. * M
-        for row in 0..points.Length - border_point.Count - 1 do
-            let i = map.[row]
-            let rowcontent = weights.[i] |> List.fold (fun s (j, half_edge, w) -> s + (add i j half_edge w rotations)) (CreateVector.Dense<float>(2))
-            r.SetRow(row, rowcontent)
+        //for row in 0..points.Length - border_point.Count - 1 do
+        //    let i = map.[row]
+        //    let rowcontent = weights.[i] |> List.fold (fun s (j, half_edge, w) -> s + (add i j half_edge w rotations)) (CreateVector.Dense<float>(2))
+        //    r.SetRow(row, rowcontent)
         r
 
     let res = laplacian.Solve(rhs)
     let reshaped = [| for row in res.ToRowArrays () -> Vector2D(row.[0], row.[1]) |]
+    printfn "reshaped:%A" reshaped
     let pinned = [|for v in pinned_vector -> Vector2D(v.Real, v.Imaginary) |]
     merge_free_and_pinned reshaped pinned map
-
 
 
 [<EntryPoint>]
 let main argv = 
     use file = CvInvoke.Imread(@"C:\Users\vlj\Desktop\height_map_norway-height-map-aster-30m.png")
 
-    let size = 10
+    let size = 3
     let vertex_to_idx i j = i + size * j
     let triangle_to_idx i j = i + (size - 1) * j
     let triangle_count = (size - 1) * (size - 1) * 4
