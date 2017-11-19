@@ -57,8 +57,6 @@ let closest_rotation A =
     let v = svd A
     let u = v.U
     let vt = v.VT
-    printfn "U:%A" v.U
-    printfn "V:%A" v.VT
     if (u * vt).Determinant () < 0. then
         u.SetColumn(u.ColumnCount - 1, -1. * u.Column(u.ColumnCount - 1))
         (u * vt, - v.VT.Transpose () * v.W * v.VT)
@@ -180,19 +178,9 @@ let arap (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (t
     let energy i (current_uv: Vector2D array) =
         let cross_variance i j (half_edge:Vector<float>) (cot:float) = 
             let uiuj = (current_uv.[i] - current_uv.[j]).ToVector ()
-            half_edge.OuterProduct(uiuj).Multiply(cot)
+            uiuj.OuterProduct(half_edge).Multiply(cot)
         let add s (j, half_edge, w) = s + (cross_variance i j half_edge w)
         weights.[i] |> List.fold add (CreateMatrix.Dense<float>(2, 2))
-
-    let rotations = [|
-        for i in 0..points.Length - 1 ->
-            let e = energy i initial_guess
-            let (R, _) = closest_rotation e
-            printfn "rotation:%A" R
-            printfn "det:%A" (R.Determinant ())
-            printfn "angle:%A" (acos R.[0, 0])
-            R
-        |]
 
     let map, pinned_vector = mapping points border_point
     let start_of_fixed = points.Length - border_point.Count
@@ -215,29 +203,38 @@ let arap (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (t
     let laplacian =
         -1. * WeightMatrix.[.. start_of_fixed - 1, .. start_of_fixed - 1]
 
-    let rhs =
-        let r = WeightMatrix.[.. start_of_fixed - 1, start_of_fixed..] * pinned_vector2
-        let add i j (half_edge:Vector<float>) w (R: Matrix<float> array) =
-            let M = (R.[i] - R.[j]).Multiply(half_edge)
-            w / 2. * M
-        for row in 0..points.Length - border_point.Count - 1 do
-            let i = map.[row]
-            let rowcontent = weights.[i] |> List.fold (fun s (j, half_edge, w) -> s + (add i j half_edge w rotations)) (r.Row(row))
-            r.SetRow(row, rowcontent)
-        r
+    let iteration current_uvs =
+        let rotations = [|
+            for i in 0..points.Length - 1 ->
+                let e = energy i current_uvs
+                let (R, _) = closest_rotation e
+                R
+            |]
 
-    let res = laplacian.Solve(rhs)
-    let reshaped = [| for row in res.ToRowArrays () -> Vector2D(row.[0], row.[1]) |]
-    printfn "reshaped:%A" reshaped
-    let pinned = [|for v in pinned_vector -> Vector2D(v.Real, v.Imaginary) |]
-    merge_free_and_pinned reshaped pinned map
+        let rhs =
+            let r = WeightMatrix.[.. start_of_fixed - 1, start_of_fixed..] * pinned_vector2
+            let add i j (half_edge:Vector<float>) w (R: Matrix<float> array) =
+                let M = (R.[i] - R.[j]).Multiply(half_edge)
+                w / 2. * M
+            for row in 0..points.Length - border_point.Count - 1 do
+                let i = map.[row]
+                let rowcontent = weights.[i] |> List.fold (fun s (j, half_edge, w) -> s + (add i j half_edge w rotations)) (r.Row(row))
+                r.SetRow(row, rowcontent)
+            r
 
+        let res = laplacian.Solve(rhs)
+        let reshaped = [| for row in res.ToRowArrays () -> Vector2D(row.[0], row.[1]) |]
+
+        let pinned = [|for v in pinned_vector -> Vector2D(v.Real, v.Imaginary) |]
+        merge_free_and_pinned reshaped pinned map
+
+    Seq.fold (fun s _ -> iteration s) initial_guess {0..1000}
 
 [<EntryPoint>]
 let main argv = 
     use file = CvInvoke.Imread(@"C:\Users\vlj\Desktop\height_map_norway-height-map-aster-30m.png")
 
-    let size = 10
+    let size = 3
     let vertex_to_idx i j = i + size * j
     let triangle_to_idx i j = i + (size - 1) * j
     let triangle_count = (size - 1) * (size - 1) * 4
