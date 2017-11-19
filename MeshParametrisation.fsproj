@@ -63,36 +63,6 @@
     <Content Include="License-LGPL.txt" />
   </ItemGroup>
   <ItemGroup>
-    <Reference Include="Brahma">
-      <HintPath>..\packages\Brahma.FSharp.1.1.4\lib\net45\Brahma.dll</HintPath>
-    </Reference>
-    <Reference Include="Brahma.Agents">
-      <HintPath>..\packages\Brahma.FSharp.1.1.4\lib\net45\Brahma.Agents.dll</HintPath>
-    </Reference>
-    <Reference Include="Brahma.FSharp.OpenCL.AST">
-      <HintPath>..\packages\Brahma.FSharp.1.1.4\lib\net45\Brahma.FSharp.OpenCL.AST.dll</HintPath>
-    </Reference>
-    <Reference Include="Brahma.FSharp.OpenCL.Core">
-      <HintPath>..\packages\Brahma.FSharp.1.1.4\lib\net45\Brahma.FSharp.OpenCL.Core.dll</HintPath>
-    </Reference>
-    <Reference Include="Brahma.FSharp.OpenCL.Extensions">
-      <HintPath>..\packages\Brahma.FSharp.1.1.4\lib\net45\Brahma.FSharp.OpenCL.Extensions.dll</HintPath>
-    </Reference>
-    <Reference Include="Brahma.FSharp.OpenCL.Printer">
-      <HintPath>..\packages\Brahma.FSharp.1.1.4\lib\net45\Brahma.FSharp.OpenCL.Printer.dll</HintPath>
-    </Reference>
-    <Reference Include="Brahma.FSharp.OpenCL.Translator">
-      <HintPath>..\packages\Brahma.FSharp.1.1.4\lib\net45\Brahma.FSharp.OpenCL.Translator.dll</HintPath>
-    </Reference>
-    <Reference Include="Brahma.FSharp.OpenCL.TypeProvider">
-      <HintPath>..\packages\Brahma.FSharp.1.1.4\lib\net45\Brahma.FSharp.OpenCL.TypeProvider.dll</HintPath>
-    </Reference>
-    <Reference Include="Brahma.Helpers">
-      <HintPath>..\packages\Brahma.FSharp.1.1.4\lib\net45\Brahma.Helpers.dll</HintPath>
-    </Reference>
-    <Reference Include="Brahma.OpenCL">
-      <HintPath>..\packages\Brahma.FSharp.1.1.4\lib\net45\Brahma.OpenCL.dll</HintPath>
-    </Reference>
     <Reference Include="Emgu.CV.UI">
       <HintPath>..\packages\EMGU.CV.3.3.0.2824\lib\net35\Emgu.CV.UI.dll</HintPath>
     </Reference>
@@ -101,9 +71,6 @@
     </Reference>
     <Reference Include="FSharp.Core">
       <HintPath>..\packages\FSharp.Core.4.2.3\lib\net45\FSharp.Core.dll</HintPath>
-    </Reference>
-    <Reference Include="FSharp.Quotations.Evaluator">
-      <HintPath>..\packages\FSharp.Quotations.Evaluator.1.0.7\lib\net40\FSharp.Quotations.Evaluator.dll</HintPath>
     </Reference>
     <Reference Include="FSharpx.Collections">
       <HintPath>..\packages\FSharpx.Collections.1.17.0\lib\net40\FSharpx.Collections.dll</HintPath>
@@ -118,9 +85,6 @@
       <HintPath>..\packages\MathNet.Spatial.0.4.0\lib\net40\MathNet.Spatial.dll</HintPath>
     </Reference>
     <Reference Include="mscorlib" />
-    <Reference Include="OpenCL.Net">
-      <HintPath>..\packages\OpenCL.Net.2.2.9.0\lib\net40\OpenCL.Net.dll</HintPath>
-    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Drawing" />
