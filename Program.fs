@@ -55,10 +55,15 @@ type triangle(indexes : int array) as this =
 
 let closest_rotation A =
     let v = svd A
-    if v.S.[0] * v.S.[1] < 0. then
-        (- v.U * v.VT, - v.VT.Transpose () * v.W * v.VT)
+    let u = v.U
+    let vt = v.VT
+    printfn "U:%A" v.U
+    printfn "V:%A" v.VT
+    if (u * vt).Determinant () < 0. then
+        u.SetColumn(u.ColumnCount - 1, -1. * u.Column(u.ColumnCount - 1))
+        (u * vt, - v.VT.Transpose () * v.W * v.VT)
     else
-        (v.U * v.VT, v.VT.Transpose () * v.W * v.VT)
+        (u * vt, v.VT.Transpose () * v.W * v.VT)
 
 let mapping (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) =
     let pinned_vector = CreateVector.Dense<Complex> (border_point.Count)
@@ -183,6 +188,9 @@ let arap (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (t
         for i in 0..points.Length - 1 ->
             let e = energy i initial_guess
             let (R, _) = closest_rotation e
+            printfn "rotation:%A" R
+            printfn "det:%A" (R.Determinant ())
+            printfn "angle:%A" (acos R.[0, 0])
             R
         |]
 
@@ -203,23 +211,19 @@ let arap (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (t
         L.PermuteColumns(Permutation(map))
         L.PermuteRows(Permutation(map))
         L
-
-    printfn "WeightMatrix : %A" (WeightMatrix.ToString ())
-
+        
     let laplacian =
         -1. * WeightMatrix.[.. start_of_fixed - 1, .. start_of_fixed - 1]
-
-    printfn "Laplacian : %A" (laplacian.ToString ())
 
     let rhs =
         let r = WeightMatrix.[.. start_of_fixed - 1, start_of_fixed..] * pinned_vector2
         let add i j (half_edge:Vector<float>) w (R: Matrix<float> array) =
-            let M = (R.[i] - R.[j]).TransposeThisAndMultiply(half_edge)
+            let M = (R.[i] - R.[j]).Multiply(half_edge)
             w / 2. * M
-        //for row in 0..points.Length - border_point.Count - 1 do
-        //    let i = map.[row]
-        //    let rowcontent = weights.[i] |> List.fold (fun s (j, half_edge, w) -> s + (add i j half_edge w rotations)) (CreateVector.Dense<float>(2))
-        //    r.SetRow(row, rowcontent)
+        for row in 0..points.Length - border_point.Count - 1 do
+            let i = map.[row]
+            let rowcontent = weights.[i] |> List.fold (fun s (j, half_edge, w) -> s + (add i j half_edge w rotations)) (r.Row(row))
+            r.SetRow(row, rowcontent)
         r
 
     let res = laplacian.Solve(rhs)
@@ -233,7 +237,7 @@ let arap (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (t
 let main argv = 
     use file = CvInvoke.Imread(@"C:\Users\vlj\Desktop\height_map_norway-height-map-aster-30m.png")
 
-    let size = 3
+    let size = 10
     let vertex_to_idx i j = i + size * j
     let triangle_to_idx i j = i + (size - 1) * j
     let triangle_count = (size - 1) * (size - 1) * 4
