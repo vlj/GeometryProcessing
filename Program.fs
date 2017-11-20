@@ -20,6 +20,7 @@ type triangle(indexes : int array) as this =
             let p0 = vertexes.[indexes.[0]]
             let p1 = vertexes.[indexes.[1]]
             let p2 = vertexes.[indexes.[2]]
+            assert ((p1 - p0).DotProduct(p2 - p0) > 0.)
             (p0, p1, p2)
         member this.GetLocalBasis (vertexes : Vector3D array) =
             let (p0, p1, p2) = this.GetVertex vertexes
@@ -35,18 +36,19 @@ type triangle(indexes : int array) as this =
             let AB = B - A
             let BC = C - B
             let CA = A - C
+            let BA = - AB
+            let CB = - BC
+            let AC = - CA
             let a = AB.Length
             let b = BC.Length
             let c = CA.Length
-            let args = [| AB, -CA, c * b; -AB, BC, c * a; CA, -BC, a * b |]
+            let args = [| AB, AC, c * b; BA, BC, c * a; CA, CB, a * b |]
             let coss = args |> Array.map (function (e1, e2, denum) -> e1.DotProduct(e2) / denum)
             let sins = args |> Array.map (function (e1, e2, denum) -> e1.CrossProduct(e2).Length / denum)
             Array.map2 (/) coss sins
         member this.project (vertexes: Vector3D array) =
-            let (Ex, Ey, Ez) = this.GetLocalBasis vertexes
+            let (Ex, Ey, _) = this.GetLocalBasis vertexes
             let (p0, p1, p2) = this.GetVertex vertexes
-            let X = p1 - p0
-            let Y = p2 - p0
             [| Vector2D(p0.DotProduct(Ex), p0.DotProduct(Ey));
                Vector2D(p1.DotProduct(Ex), p1.DotProduct(Ey));
                Vector2D(p2.DotProduct(Ex), p2.DotProduct(Ey))|]
@@ -96,8 +98,6 @@ let merge_free_and_pinned (free: Vector2D array) (pinned: Vector2D array) (dic: 
 
 
 let LSCM (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (triangles: triangle array) =
-
-
     let coeff [|(p1:Vector2D); (p2:Vector2D); (p3:Vector2D)|] =
         let dT = (p1.X * p2.Y - p1.Y * p2.X) + (p2.X * p3.Y - p2.Y * p3.X) + (p3.X * p1.Y - p3.Y * p1.X)
         let s = (sign >> float) dT
@@ -134,23 +134,12 @@ let LSCM (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (t
     merge_free_and_pinned free pinned dic
 
 let arap (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (triangles: triangle array) =
-    //let neighbor =
-    //    let neighbor_dup = [| for p in points -> ([]:int list) |]
-    //    for t in triangles do
-    //        let [|i0; i1; i2|] = t.GetIndexes ()
-    //        neighbor_dup.[i0] <- i1 :: i2 :: neighbor_dup.[i0]
-    //        neighbor_dup.[i1] <- i0 :: i2 :: neighbor_dup.[i1]
-    //        neighbor_dup.[i2] <- i1 :: i0 :: neighbor_dup.[i2]
-    //    Array.map List.distinct neighbor_dup
-
-
     let initial_guess = LSCM points border_point triangles
 
     let weights =
         let w = [| for p in points -> ([]: (int * Vector<float> * float) list)|]
         let insert_or_sum k v =
             let aux = w.[k] |> List.exists (function (o, _, _) -> let (o2, _, _) = v in o = o2)
-            //if aux then failwith "not ok"
             w.[k] <- v :: w.[k]
         for t in triangles do
             let [|i0; i1; i2|] = t.GetIndexes ()
@@ -160,12 +149,12 @@ let arap (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (t
             let x1x2 = (x2 - x1).ToVector ()
             let x2x0 = (x0 - x2).ToVector ()
             let zero = CreateVector.Dense<float>(2)
-            insert_or_sum i1 (i2, x1x2, cotan.[0] / 2.)
-            insert_or_sum i2 (i1, -x1x2, cotan.[0] / 2.)
-            insert_or_sum i0 (i2, -x2x0, cotan.[1] / 2.)
-            insert_or_sum i2 (i0, x2x0, cotan.[1] / 2.)
-            insert_or_sum i0 (i1, x0x1, cotan.[2] / 2.)
-            insert_or_sum i1 (i0, -x0x1, cotan.[2] / 2.)
+            insert_or_sum i2 (i1, x1x2, cotan.[0] / 2.)
+            insert_or_sum i1 (i2, -x1x2, cotan.[0] / 2.)
+            insert_or_sum i2 (i0, -x2x0, cotan.[1] / 2.)
+            insert_or_sum i0 (i2, x2x0, cotan.[1] / 2.)
+            insert_or_sum i1 (i0, x0x1, cotan.[2] / 2.)
+            insert_or_sum i0 (i1, -x0x1, cotan.[2] / 2.)
 
             insert_or_sum i1 (i1, zero, -cotan.[0] / 2.)
             insert_or_sum i2 (i2, zero, -cotan.[0] / 2.)
@@ -174,13 +163,6 @@ let arap (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (t
             insert_or_sum i0 (i0, zero, -cotan.[2] / 2.)
             insert_or_sum i1 (i1, zero, -cotan.[2] / 2.)
         w
-
-    let energy i (current_uv: Vector2D array) =
-        let cross_variance i j (half_edge:Vector<float>) (cot:float) = 
-            let uiuj = (current_uv.[i] - current_uv.[j]).ToVector ()
-            uiuj.OuterProduct(half_edge).Multiply(cot)
-        let add s (j, half_edge, w) = s + (cross_variance i j half_edge w)
-        weights.[i] |> List.fold add (CreateMatrix.Dense<float>(2, 2))
 
     let map, pinned_vector = mapping points border_point
     let start_of_fixed = points.Length - border_point.Count
@@ -199,26 +181,63 @@ let arap (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (t
         L.PermuteColumns(Permutation(map))
         L.PermuteRows(Permutation(map))
         L
-        
+
+    printfn "Weights : %A" WeightMatrix
+
     let laplacian =
         -1. * WeightMatrix.[.. start_of_fixed - 1, .. start_of_fixed - 1]
 
-    let iteration current_uvs =
-        let rotations = [|
+
+    let find_optimal_Lt current_uvs =
+        let energy i (current_uv: Vector2D array) =
+            let cross_variance i j (half_edge:Vector<float>) (cot:float) = 
+                let uiuj = (current_uv.[i] - current_uv.[j]).ToVector ()
+                printfn "cot for %A-%A is %A ; uiuj %A; xixj %A" i j cot uiuj half_edge
+                assert (cot >= 0. || half_edge.L2Norm() = 0.)
+                let tmp = half_edge.OuterProduct(uiuj).Multiply(cot)
+                printfn "result is %A" tmp
+                tmp
+            let add s (j, half_edge, w) = s + (cross_variance i j half_edge w)
+            weights.[i] |> List.fold add (CreateMatrix.Dense<float>(2, 2))
+        [|
             for i in 0..points.Length - 1 ->
                 let e = energy i current_uvs
+                printfn "==========================="
+                printfn "Energy: %A" e
+                printfn "EDet: %A" (e.Determinant ())
                 let (R, _) = closest_rotation e
+                printfn "Rotation: %A" R
+                printfn "Angle: %A" (acos(R.[0, 0]))
+                printfn "Det:%A" (R.Determinant ())
                 R
             |]
+
+    let iteration current_uvs =
+
+        let rotations = find_optimal_Lt current_uvs
+
+        let error =
+            let mutable res = 0.
+            for i in 0..points.Length - 1 do
+                let add s (j, (xixj:Vector<float>), w) =
+                    let uiuj = (current_uvs.[i] - current_uvs.[j]).ToVector ()
+                    let transformed_xixj = xixj
+                    let local_error = (uiuj - transformed_xixj).L2Norm ()
+                    s + w * local_error
+                let local_error = (weights.[i] |> List.fold add 0.)
+                printfn "error for %A is %A" i local_error
+                res <- res + local_error
+            res
 
         let rhs =
             let r = WeightMatrix.[.. start_of_fixed - 1, start_of_fixed..] * pinned_vector2
             let add i j (half_edge:Vector<float>) w (R: Matrix<float> array) =
-                let M = (R.[i] - R.[j]).Multiply(half_edge)
+                let M = (R.[i] + R.[j]).Multiply(half_edge)
                 w / 2. * M
             for row in 0..points.Length - border_point.Count - 1 do
                 let i = map.[row]
                 let rowcontent = weights.[i] |> List.fold (fun s (j, half_edge, w) -> s + (add i j half_edge w rotations)) (r.Row(row))
+                printfn "Energy for row %A is %A" i rowcontent
                 r.SetRow(row, rowcontent)
             r
 
@@ -228,13 +247,13 @@ let arap (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (t
         let pinned = [|for v in pinned_vector -> Vector2D(v.Real, v.Imaginary) |]
         merge_free_and_pinned reshaped pinned map
 
-    Seq.fold (fun s _ -> iteration s) initial_guess {0..1000}
+    Seq.fold (fun s _ -> iteration s) initial_guess {0..0}
 
 [<EntryPoint>]
 let main argv = 
     use file = CvInvoke.Imread(@"C:\Users\vlj\Desktop\height_map_norway-height-map-aster-30m.png")
 
-    let size = 3
+    let size = 2
     let vertex_to_idx i j = i + size * j
     let triangle_to_idx i j = i + (size - 1) * j
     let triangle_count = (size - 1) * (size - 1) * 4
@@ -249,7 +268,7 @@ let main argv =
     let get_height _x _y =
         let x, y = int(round _x), int(round _y)
         let c = bmp.GetPixel(x, y)
-        float(c.GetBrightness()) * 300.
+        float(c.GetBrightness()) * 0.
     let get_points (i,j) =
         let x, y = float(i) * step_x, float(j) * step_y
         Vector3D(x, y, get_height x y)
@@ -277,23 +296,24 @@ let main argv =
          |]
     let triangles = Seq.collect square_idx_to_triangle { 0..((size - 1) * (size - 1) - 1) }
 
-    let pinned_val = dict[
-        for i in 0..(size - 1) do
-            yield (vertex_to_idx i 0, Vector2D(0., float(i) * step_y))
-        for i in 0..(size - 1) do
-            yield (vertex_to_idx i (size - 1), Vector2D(step_x * float(size), float(i) * step_y))
-        for i in 1..(size - 2) do
-            yield (vertex_to_idx 0 i, Vector2D(float(i) * step_x, 0.))
-        for i in 1..(size - 2) do
-            yield (vertex_to_idx (size - 1) i, Vector2D(float(i) * step_x, step_y * float(size)))
-        ]
+    let pinned_val = dict[0, Vector2D(0., 0.); (size * size) - 1, Vector2D(float(size - 1) * step_x, float(size - 1) * step_y)]
+        //dict[
+        //for i in 0..(size - 1) do
+        //    yield (vertex_to_idx i 0, Vector2D(0., float(i) * step_y))
+        //for i in 0..(size - 1) do
+        //    yield (vertex_to_idx i (size - 1), Vector2D(step_x * float(size), float(i) * step_y))
+        //for i in 1..(size - 2) do
+        //    yield (vertex_to_idx 0 i, Vector2D(float(i) * step_x, 0.))
+        //for i in 1..(size - 2) do
+        //    yield (vertex_to_idx (size - 1) i, Vector2D(float(i) * step_x, step_y * float(size)))
+        //]
 
 
-    let pos2D = arap points pinned_val (Array.ofSeq triangles)
+    let pos2D = arap points pinned_val (Array.ofSeq triangles) |> Array.map (function v -> Point(int(v.X), int(v.Y)))
 
-//    Array.iter (function p -> CvInvoke.Circle(file, to_points p, 5, Bgr(0.0, 0.0, 255.0).MCvScalar)) points
+    Array.iteri (fun i p -> CvInvoke.Circle(file, p, 5, Bgr(float(i) * 0., float(i) * 80., 0.).MCvScalar)) pos2D
     let draw_triangle arr = CvInvoke.Polylines(file, Array.ofSeq arr, true, Bgr(255.0, 0.0, 0.0).MCvScalar)
-    let to_pts = Seq.map (function (t:triangle) -> t.GetIndexes () |> Array.map (function x -> let v = pos2D.[x] in Point(int(v.X), int(v.Y)))) triangles
+    let to_pts = Seq.map (function (t:triangle) -> t.GetIndexes () |> Array.map (function x -> pos2D.[x])) triangles
     Seq.iter draw_triangle to_pts
 
 
