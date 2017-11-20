@@ -237,7 +237,7 @@ let arap (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (t
             for i in 0..points.Length - 1 do
                 let add s (j, (xixj:Vector<float>), w) =
                     let uiuj = (current_uvs.[i] - current_uvs.[j]).ToVector ()
-                    let transformed_xixj = xixj
+                    let transformed_xixj = rotations.[i].Multiply(xixj)
                     let local_error = (uiuj - transformed_xixj).L2Norm ()
                     s + w * local_error
                 let local_error = (weights.[i] |> List.fold add 0.)
