@@ -216,11 +216,11 @@ let arap (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (t
     let find_optimal_Lt (current_uvs: Vector2D array) =
         [|
             for i in 0..points.Length - 1 ->
-                let add_per_incidence (C1, C2, C3) (j, (half_edge:Vector<float>), w) =
+                let add_per_incidence (C1, C2, C3) (j, (xixj:Vector<float>), w) =
                     let uiuj = (current_uvs.[i] - current_uvs.[j]).ToVector ()
-                    let current_C1 = w * half_edge.L2Norm ()
-                    let current_C2 = w * uiuj.DotProduct(half_edge)
-                    let current_C3 = w * (uiuj.[0] * half_edge.[0] - uiuj.[1] * half_edge.[1])
+                    let current_C1 = w * xixj.DotProduct (xixj)
+                    let current_C2 = w * uiuj.DotProduct(xixj)
+                    let current_C3 = w * (uiuj.[0] * xixj.[1] - uiuj.[1] * xixj.[0])
                     (C1 + current_C1, C2 + current_C2, C3 + current_C3)
                 let (C1, C2, C3) = weights.[i] |> List.fold add_per_incidence (0., 0., 0.)
                 let a = C2 / C1
@@ -228,22 +228,24 @@ let arap (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (t
                 CreateMatrix.DenseOfColumnMajor(2, 2, [a; -b; b; a])
         |]
 
-    let iteration current_uvs =
 
+    let error (current_uvs:Vector2D array) (rotations:Matrix<float> array) =
+        let mutable res = 0.
+        for i in 0..points.Length - 1 do
+            let add s (j, (xixj:Vector<float>), w) =
+                let uiuj = (current_uvs.[i] - current_uvs.[j]).ToVector ()
+                let transformed_xixj = rotations.[i].Multiply(xixj)
+                let local_error = (uiuj - transformed_xixj).L2Norm ()
+                s + w * local_error
+            let local_error = (weights.[i] |> List.fold add 0.)
+            printfn "error for %A is %A" i local_error
+            res <- res + local_error
+        res
+
+    let iteration current_uvs =
         let rotations = find_optimal_Lt current_uvs
 
-        let error =
-            let mutable res = 0.
-            for i in 0..points.Length - 1 do
-                let add s (j, (xixj:Vector<float>), w) =
-                    let uiuj = (current_uvs.[i] - current_uvs.[j]).ToVector ()
-                    let transformed_xixj = rotations.[i].Multiply(xixj)
-                    let local_error = (uiuj - transformed_xixj).L2Norm ()
-                    s + w * local_error
-                let local_error = (weights.[i] |> List.fold add 0.)
-                printfn "error for %A is %A" i local_error
-                res <- res + local_error
-            res
+        printfn "%A" (error current_uvs rotations)
 
         let rhs =
             let r = WeightMatrix.[.. start_of_fixed - 1, start_of_fixed..] * pinned_vector2
@@ -261,9 +263,11 @@ let arap (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (t
         let reshaped = [| for row in res.ToRowArrays () -> Vector2D(row.[0], row.[1]) |]
 
         let pinned = [|for v in pinned_vector -> Vector2D(v.Real, v.Imaginary) |]
-        merge_free_and_pinned reshaped pinned map
+        let res = merge_free_and_pinned reshaped pinned map
+        printfn "%A" (error res rotations)
+        res
 
-    Seq.fold (fun s _ -> iteration s) initial_guess {0..0}
+    Seq.fold (fun s _ -> iteration s) initial_guess {0..10}
 
 [<EntryPoint>]
 let main argv = 
