@@ -20,7 +20,6 @@ type triangle(indexes : int array) as this =
             let p0 = vertexes.[indexes.[0]]
             let p1 = vertexes.[indexes.[1]]
             let p2 = vertexes.[indexes.[2]]
-            assert ((p1 - p0).DotProduct(p2 - p0) > 0.)
             (p0, p1, p2)
         member this.GetLocalBasis (vertexes : Vector3D array) =
             let (p0, p1, p2) = this.GetVertex vertexes
@@ -136,6 +135,45 @@ let LSCM (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (t
 let arap (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (triangles: triangle array) =
     let initial_guess = LSCM points border_point triangles
 
+    let half_edges = dict[
+        for t in triangles do
+            let [|i0; i1; i2|] = t.GetIndexes ()
+            let cotan = t.GetCotangent points
+            let [|x0; x1; x2|] = t.project points
+            let x0x1 = (x1 - x0).ToVector ()
+            let x1x2 = (x2 - x1).ToVector ()
+            let x2x0 = (x0 - x2).ToVector ()
+            yield ((i0, i1), (x0x1, cotan.[2] / 2.)) // cotan at i2
+            yield ((i1, i2), (x1x2, cotan.[0] / 2.)) // cotan at i0
+            yield ((i2, i0), (x2x0, cotan.[1] / 2.)) // cotan at i1
+        ]
+
+    let insert_or_sum (n: 'a array) k v = n.[k] <- v :: n.[k]
+
+    let source =
+        let n = [| for p in points -> ([]: (int * Vector<float> * float) list)|]
+        for kv in half_edges do
+            let (s, t) = kv.Key
+            let (he, cot) = kv.Value
+            insert_or_sum n t (s, he, cot)
+        n
+
+    let target =
+        let n = [| for p in points -> ([]: (int * Vector<float> * float) list)|]
+        for kv in half_edges do
+            let (s, t) = kv.Key
+            let (he, cot) = kv.Value
+            insert_or_sum n s (t, he, cot)
+        n
+
+    printfn "S:%A" source
+    printfn "T:%A" target
+
+    target |>
+        Array.iteri (fun i lst->
+            lst |> List.iter (function (j, _, _) -> let assertion = List.exists (function (id, _, _) -> id = i) source.[j] in assert assertion)
+            )
+
     let weights =
         let w = [| for p in points -> ([]: (int * Vector<float> * float) list)|]
         let insert_or_sum k v =
@@ -198,7 +236,7 @@ let arap (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (t
                 printfn "result is %A" tmp
                 tmp
             let add s (j, half_edge, w) = s + (cross_variance i j half_edge w)
-            weights.[i] |> List.fold add (CreateMatrix.Dense<float>(2, 2))
+            target.[i] |> List.fold add (CreateMatrix.Dense<float>(2, 2))
         [|
             for i in 0..points.Length - 1 ->
                 let e = energy i
@@ -215,14 +253,19 @@ let arap (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (t
 
     let find_optimal_Lt (current_uvs: Vector2D array) =
         [|
+            let half_edge_Cs (s, t) =
+                let uiuj = (current_uvs.[s] - current_uvs.[t]).ToVector ()
+                let (xixj, w) = half_edges.[(s, t)]
+                let current_C1 = w * xixj.DotProduct (xixj)
+                let current_C2 = w * uiuj.DotProduct(xixj)
+                let current_C3 = w * (uiuj.[0] * xixj.[1] - uiuj.[1] * xixj.[0])
+                (current_C1, current_C2, current_C3)
+
             for i in 0..points.Length - 1 ->
-                let add_per_incidence (C1, C2, C3) (j, (xixj:Vector<float>), w) =
-                    let uiuj = (current_uvs.[i] - current_uvs.[j]).ToVector ()
-                    let current_C1 = w * xixj.DotProduct (xixj)
-                    let current_C2 = w * uiuj.DotProduct(xixj)
-                    let current_C3 = w * (uiuj.[0] * xixj.[1] - uiuj.[1] * xixj.[0])
+                let add_half_edge_Cs (C1, C2, C3) (j, _, _) =
+                    let (current_C1, current_C2, current_C3) = half_edge_Cs (i, j)
                     (C1 + current_C1, C2 + current_C2, C3 + current_C3)
-                let (C1, C2, C3) = weights.[i] |> List.fold add_per_incidence (0., 0., 0.)
+                let (C1, C2, C3) = target.[i] |> List.fold add_half_edge_Cs (0., 0., 0.)
                 let a = C2 / C1
                 let b = C3 / C1
                 CreateMatrix.DenseOfColumnMajor(2, 2, [a; -b; b; a])
@@ -232,13 +275,18 @@ let arap (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (t
     let error (current_uvs:Vector2D array) (rotations:Matrix<float> array) =
         let mutable res = 0.
         for i in 0..points.Length - 1 do
-            let add s (j, (xixj:Vector<float>), w) =
-                let uiuj = (current_uvs.[i] - current_uvs.[j]).ToVector ()
+            let half_edge_energy (s, t) =
+                let uiuj = (current_uvs.[s] - current_uvs.[t]).ToVector ()
+                let (xixj, w) = half_edges.[(s, t)]
                 let transformed_xixj = rotations.[i].Multiply(xixj)
                 let local_error = (uiuj - transformed_xixj).L2Norm ()
-                s + w * local_error
-            let local_error = (weights.[i] |> List.fold add 0.)
-            printfn "error for %A is %A" i local_error
+                let tmp = w * local_error * local_error
+                printfn "for %A -> %A uv: %A xy: %A rotated-xy : %A error : %A" s t uiuj xixj transformed_xixj tmp
+                printfn "(rot) %A" rotations.[i]
+                tmp
+            let add s (j, (xixj:Vector<float>), w) =
+                s + (half_edge_energy (i, j))
+            let local_error = (target.[i] |> List.fold add 0.)
             res <- res + local_error
         res
 
@@ -249,13 +297,15 @@ let arap (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (t
 
         let rhs =
             let r = WeightMatrix.[.. start_of_fixed - 1, start_of_fixed..] * pinned_vector2
-            let add i j (half_edge:Vector<float>) w (R: Matrix<float> array) =
-                let M = (R.[i] + R.[j]).Multiply(half_edge)
-                w / 2. * M
+            let get_half_bij (r:Matrix<float>) (half_edge:Vector<float>) w = 
+                r.Multiply(w / 2.).Multiply(half_edge)
+            let get_bij i j =
+                let t = List.find (function (id, _, _) -> id = j) target.[i] |> function (_, half_edge, w) -> get_half_bij rotations.[i] half_edge w
+                let s =  List.find (function (id, _, _) -> id = i) source.[j] |> function (_, half_edge, w) -> get_half_bij rotations.[j] half_edge w
+                s + t
             for row in 0..points.Length - border_point.Count - 1 do
                 let i = map.[row]
-                let rowcontent = weights.[i] |> List.fold (fun s (j, half_edge, w) -> s + (add i j half_edge w rotations)) (r.Row(row))
-                printfn "Energy for row %A is %A" i rowcontent
+                let rowcontent = target.[i] |> List.fold (fun s (j, _, _) -> s + (get_bij i j)) (r.Row(row))
                 r.SetRow(row, rowcontent)
             r
 
@@ -267,7 +317,7 @@ let arap (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (t
         printfn "%A" (error res rotations)
         res
 
-    Seq.fold (fun s _ -> iteration s) initial_guess {0..10}
+    Seq.fold (fun s _ -> iteration s) initial_guess {0..0}
 
 [<EntryPoint>]
 let main argv = 
