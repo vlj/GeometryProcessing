@@ -188,8 +188,8 @@ let arap (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (t
         -1. * WeightMatrix.[.. start_of_fixed - 1, .. start_of_fixed - 1]
 
 
-    let find_optimal_Lt current_uvs =
-        let energy i (current_uv: Vector2D array) =
+    let find_optimal_Lt2 (current_uv: Vector2D array)  =
+        let energy i =
             let cross_variance i j (half_edge:Vector<float>) (cot:float) = 
                 let uiuj = (current_uv.[i] - current_uv.[j]).ToVector ()
                 printfn "cot for %A-%A is %A ; uiuj %A; xixj %A" i j cot uiuj half_edge
@@ -201,7 +201,7 @@ let arap (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (t
             weights.[i] |> List.fold add (CreateMatrix.Dense<float>(2, 2))
         [|
             for i in 0..points.Length - 1 ->
-                let e = energy i current_uvs
+                let e = energy i
                 printfn "==========================="
                 printfn "Energy: %A" e
                 printfn "EDet: %A" (e.Determinant ())
@@ -211,6 +211,22 @@ let arap (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (t
                 printfn "Det:%A" (R.Determinant ())
                 R
             |]
+
+
+    let find_optimal_Lt (current_uvs: Vector2D array) =
+        [|
+            for i in 0..points.Length - 1 ->
+                let add_per_incidence (C1, C2, C3) (j, (half_edge:Vector<float>), w) =
+                    let uiuj = (current_uvs.[i] - current_uvs.[j]).ToVector ()
+                    let current_C1 = w * half_edge.L2Norm ()
+                    let current_C2 = w * uiuj.DotProduct(half_edge)
+                    let current_C3 = w * (uiuj.[0] * half_edge.[0] - uiuj.[1] * half_edge.[1])
+                    (C1 + current_C1, C2 + current_C2, C3 + current_C3)
+                let (C1, C2, C3) = weights.[i] |> List.fold add_per_incidence (0., 0., 0.)
+                let a = C2 / C1
+                let b = C3 / C1
+                CreateMatrix.DenseOfColumnMajor(2, 2, [a; -b; b; a])
+        |]
 
     let iteration current_uvs =
 
