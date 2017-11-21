@@ -285,7 +285,7 @@ let arap (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (t
                 let t = let (half_edge, w) = half_edges.[(i, j)] in get_half_bij (rotations.[edge_to_triangle.[(i,j)]]) half_edge w
                 if half_edges.ContainsKey (j,i) then
                     let s = let (half_edge, w) = half_edges.[(j, i)] in get_half_bij (rotations.[edge_to_triangle.[(j, i)]]) half_edge w
-                    s + t
+                    - s + t
                 else
                     t
             printfn "r:%A" r
