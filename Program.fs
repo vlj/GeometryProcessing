@@ -302,18 +302,16 @@ let arap (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (t
         let reshaped = [| for row in res.ToRowArrays () -> Vector2D(row.[0], row.[1]) |]
         printfn "%A" reshaped
 
-        let pinned = [|for v in pinned_vector -> Vector2D(v.Real, v.Imaginary) |]
-        let res = merge_free_and_pinned reshaped pinned map
-        printfn "after rhs %A" (error res rotations)
-        res
+        //printfn "after rhs %A" (error res rotations)
+        reshaped
 
-    Seq.fold (fun s _ -> iteration s) initial_guess {0..1}
+    Seq.fold (fun s _ -> iteration s) initial_guess {0..10}
 
 [<EntryPoint>]
 let main argv = 
     use file = CvInvoke.Imread(@"C:\Users\vlj\Desktop\height_map_norway-height-map-aster-30m.png")
 
-    let size = 2
+    let size = 10
     let vertex_to_idx i j = i + size * j
     let triangle_to_idx i j = i + (size - 1) * j
     let triangle_count = (size - 1) * (size - 1) * 4
