@@ -154,32 +154,6 @@ let arap (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (t
                 L.[i, i] <- - acc
         L
 
-    printfn "Weights : %A" MatrixA
-
-    let find_optimal_Lt2 (current_uv: Vector2D array)  =
-        let energy i =
-            let cross_variance i j (half_edge:Vector<float>) (cot:float) = 
-                let uiuj = (current_uv.[i] - current_uv.[j]).ToVector ()
-                printfn "cot for %A-%A is %A ; uiuj %A; xixj %A" i j cot uiuj half_edge
-                assert (cot >= 0. || half_edge.L2Norm() = 0.)
-                let tmp = half_edge.OuterProduct(uiuj).Multiply(cot)
-                printfn "result is %A" tmp
-                tmp
-            let add s (j, half_edge, w) = s + (cross_variance i j half_edge w)
-            target.[i] |> List.fold add (CreateMatrix.Dense<float>(2, 2))
-        [|
-            for i in 0..points.Length - 1 ->
-                let e = energy i
-                printfn "==========================="
-                printfn "Energy: %A" e
-                printfn "EDet: %A" (e.Determinant ())
-                let (R, _) = closest_rotation e
-                printfn "Rotation: %A" R
-                printfn "Angle: %A" (acos(R.[0, 0]))
-                printfn "Det:%A" (R.Determinant ())
-                R
-            |]
-
     let edge_to_triangle =
         dict[
             for t in triangles do
@@ -243,21 +217,18 @@ let arap (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (t
                     - s + t
                 else
                     t
-            printfn "r:%A" r
             for i in 0..points.Length - 1 do
                 if map.[i] >= start_of_fixed then
                     r.SetRow(i, pinned_vector2.Row(map.[i] - start_of_fixed))
                 else
                     let rowcontent = target.[i] |> List.fold (fun s (j, _, _) -> s + (get_bij i j)) (CreateVector.Dense<float> 2)
                     r.SetRow(i, rowcontent)
-            printfn "r:%A" r
             r
 
         let res = MatrixA.Solve(rhs)
         let reshaped = [| for row in res.ToRowArrays () -> Vector2D(row.[0], row.[1]) |]
-        printfn "%A" reshaped
 
-        //printfn "after rhs %A" (error res rotations)
+        printfn "after rhs %A" (error reshaped rotations)
         reshaped
 
-    Seq.fold (fun s _ -> iteration s) initial_guess {0..10}
+    Seq.fold (fun s _ -> iteration s) initial_guess {0..1}
