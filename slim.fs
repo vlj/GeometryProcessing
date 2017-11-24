@@ -85,5 +85,21 @@ let SLIM (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (t
                 rhs.[tri + 3 * trilength] <- W_21.[tri] * R.[tri, 2] + W_22.[tri] * R.[tri, 3]
 
         A.Transpose()
+
+    let Dx = CreateMatrix.Dense<float>(triangles.Length, points.Length)
+    let Dy = CreateMatrix.Dense<float>(triangles.Length, points.Length)
+    triangles |> Array.iteri (fun i t -> let D1, D2 = compute_surface_gradient_matrix t in Dx.SetRow(i, D1); Dy.SetRow(i, D2))
+
+    let current_u = CreateVector.Dense(points.Length)
+    let current_v = CreateVector.Dense(points.Length)
+
+    let iterations =
+        for i in 0..triangles.Length - 1 do
+            let J = compute_jacobians (Dx.Row(i)) (Dy.Row(i)) current_u current_v
+            let tmp = get_closest_transform J
+            tmp
+
+        ()
+
     ()
 
