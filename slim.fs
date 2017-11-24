@@ -8,17 +8,18 @@ open MathNet.Spatial.Euclidean
 open System.Numerics
 open System.Collections.Generic
 open MathNet.Numerics
+open arap
 
 let SLIM (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (triangles: triangle array) =
     let compute_surface_gradient_matrix (t:triangle) =
         let [|i1;i2;i3|] = t.GetIndexes ()
         let perpx1x3, perpx2x1 = t.getGradient points
         let (Ex, Ey, _) = t.GetLocalBasis points
-        let D1 = CreateVector.Dense<float> (1)
+        let D1 = CreateVector.Dense<float> (points.Length)
         D1.[i2] <- Ex.X * perpx1x3.X + Ex.Y * perpx1x3.Y + Ex.Z * perpx1x3.Z
         D1.[i3] <- Ex.X * perpx2x1.X + Ex.Y * perpx2x1.Y + Ex.Z * perpx2x1.Z
         D1.[i1] <- - Ex.X * (perpx1x3.X - perpx2x1.X) - Ex.Y * (perpx1x3.Y - perpx2x1.Y) - Ex.Z * (perpx1x3.Z - perpx2x1.Z)
-        let D2 = CreateVector.Dense<float> (1)
+        let D2 = CreateVector.Dense<float> (points.Length)
         D2.[i2] <- Ey.X * perpx1x3.X + Ey.Y * perpx1x3.Y + Ey.Z * perpx1x3.Z
         D2.[i3] <- Ey.X * perpx2x1.X + Ey.Y * perpx2x1.Y + Ey.Z * perpx2x1.Z
         D2.[i1] <- - Ey.X * (perpx1x3.X - perpx2x1.X) - Ey.Y * (perpx1x3.Y - perpx2x1.Y) - Ey.Z * (perpx1x3.Z - perpx2x1.Z)
@@ -55,51 +56,72 @@ let SLIM (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (t
         let R = svd_res.U * svd_res.VT
         MatW, R
 
-    let buildA (Dx:Matrix<float>) (Dy:Matrix<float>) (W_11:Vector<float>) (W_12:Vector<float>) (W_21:Vector<float>) (W_22:Vector<float>) =
+    let buildA (Dx:Matrix<float>) (Dy:Matrix<float>) (Ws:Matrix<float> array) =
         let IJV = CreateMatrix.Dense<float>(2 * 2 * triangles.Length, 2 * points.Length)
         for row in 0..Dx.RowCount - 1 do
             for col in 0..Dx.ColumnCount - 1 do
                 let v = Dx.[row, col]
-                IJV.[row, col] <- v * W_11.[row]
-                IJV.[row, col + points.Length] <- v * W_12.[row]
-                IJV.[row + 2 * triangles.Length, col] <- v * W_21.[row]
-                IJV.[row + 2 * triangles.Length, col +  points.Length] <- v * W_22.[row]
+                if v <> 0. then
+                    let W = Ws.[row]
+                    IJV.[row, col] <- v * W.[0, 0]
+                    IJV.[row, col + points.Length] <- v * W.[0, 1]
+                    IJV.[row + 2 * triangles.Length, col] <- v * W.[1, 0]
+                    IJV.[row + 2 * triangles.Length, col +  points.Length] <- v * W.[1, 1]
         for row in 0..Dy.RowCount - 1 do
             for col in 0..Dy.ColumnCount - 1 do
                 let v = Dx.[row, col]
-                IJV.[row, col] <- v * W_11.[row]
-                IJV.[row, col + points.Length] <- v * W_12.[row]
-                IJV.[row + 2 * triangles.Length, col] <- v * W_21.[row]
-                IJV.[row + 2 * triangles.Length, col +  points.Length] <- v * W_22.[row]
+                let W = Ws.[row]
+                if v <> 0. then
+                    IJV.[row, col] <- IJV.[row, col] + v * W.[0, 0]
+                    IJV.[row, col + points.Length] <- IJV.[row, col + points.Length] + v * W.[0, 1]
+                    IJV.[row + 2 * triangles.Length, col] <- IJV.[row + 2 * triangles.Length, col] + v * W.[1, 0]
+                    IJV.[row + 2 * triangles.Length, col +  points.Length] <- IJV.[row + 2 * triangles.Length, col +  points.Length] + v * W.[1, 1]
         IJV
 
-    let build_linear_system (Dx:Matrix<float>) (Dy:Matrix<float>) (W_11:Vector<float>) (W_12:Vector<float>) (W_21:Vector<float>) (W_22:Vector<float>) =
-        let A = buildA Dx Dy W_11 W_12 W_21 W_22
-        let buildRhs (R:Matrix<float>) =
+    let build_linear_system (Dx:Matrix<float>) (Dy:Matrix<float>) (W_and_R:(Matrix<float> * Matrix<float>) array)=
+        let A = buildA Dx Dy (Array.map fst W_and_R)
+        let rhs =
             let trilength = triangles.Length
             let rhs = CreateVector.Dense (2 * 2 * trilength)
             for tri in 0..trilength - 1 do
-                rhs.[tri] <- W_11.[tri] * R.[tri, 0] + W_12.[tri] * R.[tri, 1]
-                rhs.[tri + trilength] <- W_11.[tri] * R.[tri, 2] + W_12.[tri] * R.[tri, 3]
-                rhs.[tri + 2 * trilength] <- W_21.[tri] * R.[tri, 0] + W_22.[tri] * R.[tri, 1]
-                rhs.[tri + 3 * trilength] <- W_21.[tri] * R.[tri, 2] + W_22.[tri] * R.[tri, 3]
-
-        A.Transpose()
+                let W, R = W_and_R.[tri]
+                let tmp = W * R
+                rhs.[tri] <- tmp.[0, 0]
+                rhs.[tri + trilength] <- tmp.[0, 1]
+                rhs.[tri + 2 * trilength] <- tmp.[1, 0]
+                rhs.[tri + 3 * trilength] <- tmp.[1, 1]
+            rhs
+        A, rhs
 
     let Dx = CreateMatrix.Dense<float>(triangles.Length, points.Length)
     let Dy = CreateMatrix.Dense<float>(triangles.Length, points.Length)
     triangles |> Array.iteri (fun i t -> let D1, D2 = compute_surface_gradient_matrix t in Dx.SetRow(i, D1); Dy.SetRow(i, D2))
 
-    let current_u = CreateVector.Dense(points.Length)
-    let current_v = CreateVector.Dense(points.Length)
+    printfn "Dx:%A" Dx
+    printfn "Dy:%A" Dy
+
+    let initial_guess = LSCM points border_point triangles
+
+    let current_u = CreateVector.Dense(initial_guess |> Array.map (function v -> v.X))
+    let current_v = CreateVector.Dense(initial_guess |> Array.map (function v -> v.Y))
 
     let iterations =
-        for i in 0..triangles.Length - 1 do
-            let J = compute_jacobians (Dx.Row(i)) (Dy.Row(i)) current_u current_v
-            let tmp = get_closest_transform J
-            tmp
+        let W_and_R = 
+            [| for i in 0..triangles.Length - 1 ->
+                let J = compute_jacobians (Dx.Row(i)) (Dy.Row(i)) current_u current_v
+                printfn "%A -> %A" i J
+                let r = get_closest_transform J
+                printfn "%A" r
+                r|]
+        let A, rhs = build_linear_system Dx Dy W_and_R
+        printfn "A:%A" A
+        printfn "RHS: %A" rhs
+        let res = A.Solve(rhs)
+        let reshaped = [| for row in 0..res.Count - 1 -> Vector2D(res.[row], res.[row]) |]
+        printfn "%A" reshaped
+        reshaped
 
-        ()
+        //reshaped
 
-    ()
+    iterations
 

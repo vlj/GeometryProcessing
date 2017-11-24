@@ -7,6 +7,7 @@ open System.Drawing
 open MathNet.Spatial.Euclidean
 open triangle
 open arap
+open slim
 
 
 
@@ -14,7 +15,7 @@ open arap
 let main argv = 
     use file = CvInvoke.Imread(@"C:\Users\vlj\Desktop\height_map_norway-height-map-aster-30m.png")
 
-    let size = 5
+    let size = 2
     let vertex_to_idx i j = i + size * j
     let triangle_to_idx i j = i + (size - 1) * j
     let triangle_count = (size - 1) * (size - 1) * 4
@@ -70,7 +71,7 @@ let main argv =
         //]
 
 
-    let pos2D = arap points pinned_val (Array.ofSeq triangles) |> Array.map (function v -> Point(int(v.X), int(v.Y)))
+    let pos2D = SLIM points pinned_val (Array.ofSeq triangles) |> Array.map (function v -> Point(int(v.X), int(v.Y)))
 
     Array.iteri (fun i p -> CvInvoke.Circle(file, p, 5, Bgr(float(i) * 0., float(i) * 80., 0.).MCvScalar)) pos2D
     let draw_triangle arr = CvInvoke.Polylines(file, Array.ofSeq arr, true, Bgr(255.0, 0.0, 0.0).MCvScalar)
