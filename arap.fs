@@ -193,11 +193,9 @@ let arap (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (t
             let rotation = rotations.[edge_to_triangle.[(s, t)]]
             let transformed_xixj = rotation.Multiply(xixj)
             let local_error = (uiuj - transformed_xixj).L2Norm ()
-            w * local_error * local_error
-        for i in 0..points.Length - 1 do
-            let add s (j, (xixj:Vector<float>), w) =
-                s + (half_edge_energy (i, j))
-            let local_error = (target.[i] |> List.fold add 0.)
+            w * local_error
+        for kv in half_edges do
+            let local_error = half_edge_energy kv.Key
             res <- res + local_error
         res
 
@@ -231,4 +229,4 @@ let arap (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (t
         printfn "after rhs %A" (error reshaped rotations)
         reshaped
 
-    Seq.fold (fun s _ -> iteration s) initial_guess {0..1}
+    Seq.fold (fun s _ -> iteration s) initial_guess {0..10}
