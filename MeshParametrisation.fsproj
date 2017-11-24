@@ -59,6 +59,7 @@
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="triangle.fs" />
     <Compile Include="arap.fs" />
+    <Compile Include="slim.fs" />
     <Compile Include="Program.fs" />
     <None Include="App.config" />
     <Content Include="packages.config" />
