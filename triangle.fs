@@ -39,6 +39,15 @@ type triangle(indexes : int array) as this =
             [| Vector2D(p0.DotProduct(Ex), p0.DotProduct(Ey));
                Vector2D(p1.DotProduct(Ex), p1.DotProduct(Ey));
                Vector2D(p2.DotProduct(Ex), p2.DotProduct(Ey))|]
+        member this.getArea (vertexes: Vector3D array) =
+            let [|i1;i2;i3|] = this.GetIndexes ()
+            let x3x2 = vertexes.[i3] - vertexes.[i2]
+            let x1x3 = vertexes.[i1] - vertexes.[i3]
+            let x2x1 = vertexes.[i2] - vertexes.[i1]
+
+            let n = x3x2.CrossProduct(x1x3).ToVector ()
+            // twice the triangle area
+            (n.L2Norm()) / 2.
         member this.getGradient (vertexes: Vector3D array) =
             let [|i1;i2;i3|] = this.GetIndexes ()
             let x3x2 = vertexes.[i3] - vertexes.[i2]
@@ -47,7 +56,7 @@ type triangle(indexes : int array) as this =
 
             let n = x3x2.CrossProduct(x1x3)
             // twice the triangle area
-            let Ax2 = sqrt n.Length
+            let Ax2 = (n.ToVector ()).L2Norm()
             let u = n.Normalize()
 
             let perpx2x1 = x2x1.Length * u.CrossProduct(x2x1).Normalize() / Ax2

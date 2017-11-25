@@ -28,8 +28,8 @@ let SLIM (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (t
     let compute_jacobians (Dx:Vector<float>) (Dy:Vector<float>) (u:Vector<float>) (v:Vector<float>) =
         let J = CreateMatrix.Dense<float>(2, 2)
         J.[0, 0] <- Dx.DotProduct(u)
-        J.[0, 1] <- Dy.DotProduct(v)
-        J.[1, 0] <- Dx.DotProduct(u)
+        J.[0, 1] <- Dy.DotProduct(u)
+        J.[1, 0] <- Dx.DotProduct(v)
         J.[1, 1] <- Dy.DotProduct(v)
         J
 
@@ -54,11 +54,11 @@ let SLIM (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (t
         //let news0 = sqrt (s0_g / (2. * (s0 - 1.)))
         //let news1 = sqrt (s1_g / (2. * (s1 - 1.)))
         let diags = CreateMatrix.DenseOfDiagonalVector(CreateVector.DenseOfArray[|1.; 1.|])
-        let MatW = svd_res.U * diags * (svd_res.U.Transpose ())
+        let MatW = CreateMatrix.DenseIdentity(2)//svd_res.U * diags * (svd_res.U.Transpose ())
         let R = svd_res.U * svd_res.VT
-        printfn "W: %A" MatW
-        printfn "R: %A" R
         MatW, R
+
+    let triangle_area = CreateMatrix.DenseOfDiagonalArray [| for i in 0..3 do for t in triangles do yield t.getArea points|]
 
     let buildA (Dx:Matrix<float>) (Dy:Matrix<float>) (Ws:Matrix<float> array) =
         let IJV = CreateMatrix.Dense<float>(2 * 2 * triangles.Length, 2 * points.Length)
@@ -68,7 +68,7 @@ let SLIM (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (t
                 if v <> 0. then
                     let W = Ws.[row]
                     IJV.[row, col] <- v * W.[0, 0]
-                    IJV.[row, col + points.Length] <- v * W.[0, 1]
+                    IJV.[row, col + points.Length] <- v* W.[0, 1]
                     IJV.[row + 2 * triangles.Length, col] <- v * W.[1, 0]
                     IJV.[row + 2 * triangles.Length, col +  points.Length] <- v * W.[1, 1]
         for row in 0..Dy.RowCount - 1 do
@@ -76,7 +76,7 @@ let SLIM (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (t
                 let v = Dx.[row, col]
                 let W = Ws.[row]
                 if v <> 0. then
-                    IJV.[row + triangles.Length, col] <- IJV.[row, col]
+                    IJV.[row + triangles.Length, col] <- v * W.[0, 0]
                     IJV.[row + triangles.Length, col + points.Length] <- v * W.[0, 1]
                     IJV.[row + 3 * triangles.Length, col] <- v * W.[1, 0]
                     IJV.[row + 3 * triangles.Length, col +  points.Length] <- v * W.[1, 1]
@@ -95,7 +95,7 @@ let SLIM (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (t
                 rhs.[tri + 2 * trilength] <- tmp.[1, 0]
                 rhs.[tri + 3 * trilength] <- tmp.[1, 1]
             rhs
-        (A.Transpose () * A), (A.Transpose () * rhs)
+        (A.Transpose () * triangle_area * A), (A.Transpose () * triangle_area * rhs)
 
     let Dx = CreateMatrix.Dense<float>(triangles.Length, points.Length)
     let Dy = CreateMatrix.Dense<float>(triangles.Length, points.Length)
@@ -113,7 +113,9 @@ let SLIM (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (t
         let W_and_R = 
             [| for i in 0..triangles.Length - 1 ->
                 let J = compute_jacobians (Dx.Row(i)) (Dy.Row(i)) current_u current_v
-                get_closest_transform J |]
+                let res = get_closest_transform J
+                printfn "W and R %A" res
+                res|]
         let A, rhs = build_linear_system Dx Dy W_and_R
 
         for kv in border_point do
