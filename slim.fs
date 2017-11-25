@@ -14,15 +14,15 @@ let SLIM (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (t
     let compute_surface_gradient_matrix (t:triangle) =
         let [|i1;i2;i3|] = t.GetIndexes ()
         let perpx1x3, perpx2x1 = t.getGradient points
+        let aux (E:UnitVector3D) (D:Vector<float>) = 
+            D.[i2] <- E.X * perpx1x3.X + E.Y * perpx1x3.Y + E.Z * perpx1x3.Z
+            D.[i3] <- E.X * perpx2x1.X + E.Y * perpx2x1.Y + E.Z * perpx2x1.Z
+            D.[i1] <- - E.X * (perpx1x3.X + perpx2x1.X) - E.Y * (perpx1x3.Y + perpx2x1.Y) - E.Z * (perpx1x3.Z + perpx2x1.Z)
         let (Ex, Ey, _) = t.GetLocalBasis points
         let D1 = CreateVector.Dense<float> (points.Length)
-        D1.[i2] <- Ex.X * perpx1x3.X + Ex.Y * perpx1x3.Y + Ex.Z * perpx1x3.Z
-        D1.[i3] <- Ex.X * perpx2x1.X + Ex.Y * perpx2x1.Y + Ex.Z * perpx2x1.Z
-        D1.[i1] <- - Ex.X * (perpx1x3.X - perpx2x1.X) - Ex.Y * (perpx1x3.Y - perpx2x1.Y) - Ex.Z * (perpx1x3.Z - perpx2x1.Z)
         let D2 = CreateVector.Dense<float> (points.Length)
-        D2.[i2] <- Ey.X * perpx1x3.X + Ey.Y * perpx1x3.Y + Ey.Z * perpx1x3.Z
-        D2.[i3] <- Ey.X * perpx2x1.X + Ey.Y * perpx2x1.Y + Ey.Z * perpx2x1.Z
-        D2.[i1] <- - Ey.X * (perpx1x3.X - perpx2x1.X) - Ey.Y * (perpx1x3.Y - perpx2x1.Y) - Ey.Z * (perpx1x3.Z - perpx2x1.Z)
+        aux Ex D1
+        aux Ey D2
         (D1, D2)
 
     let compute_jacobians (Dx:Vector<float>) (Dy:Vector<float>) (u:Vector<float>) (v:Vector<float>) =
@@ -73,7 +73,7 @@ let SLIM (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (t
                     //IJV.[row + 2 * triangles.Length, col +  points.Length] <- v * W.[1, 1]
         for row in 0..Dy.RowCount - 1 do
             for col in 0..Dy.ColumnCount - 1 do
-                let v = Dx.[row, col]
+                let v = Dy.[row, col]
                 let W = Ws.[row]
                 if v <> 0. then
                     IJV.[row + triangles.Length, col] <- v * W.[0, 0]
@@ -95,6 +95,7 @@ let SLIM (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (t
                 rhs.[tri + 2 * trilength] <- tmp.[1, 0]
                 rhs.[tri + 3 * trilength] <- tmp.[1, 1]
             rhs
+        printfn "A is %A before squared" A
         (A.Transpose () * triangle_area * A), (A.Transpose () * triangle_area * rhs)
 
     let Dx = CreateMatrix.Dense<float>(triangles.Length, points.Length)

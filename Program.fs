@@ -30,7 +30,7 @@ let main argv =
     let get_height _x _y =
         let x, y = int(round _x), int(round _y)
         let c = bmp.GetPixel(x, y)
-        float(c.GetBrightness()) * 300.
+        float(c.GetBrightness()) * 0.
     let get_points (i,j) =
         let x, y = float(i) * step_x, float(j) * step_y
         Vector3D(x, y, get_height x y)
