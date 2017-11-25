@@ -61,25 +61,25 @@ let SLIM (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (t
     let triangle_area = CreateMatrix.DenseOfDiagonalArray [| for i in 0..3 do for t in triangles do yield t.getArea points|]
 
     let buildA (Dx:Matrix<float>) (Dy:Matrix<float>) (Ws:Matrix<float> array) =
-        let IJV = CreateMatrix.Dense<float>(2 * 2 * triangles.Length, 2 * points.Length)
+        let IJV = CreateMatrix.Dense<float>(2 * 2 * triangles.Length, 1 * points.Length)
         for row in 0..Dx.RowCount - 1 do
             for col in 0..Dx.ColumnCount - 1 do
                 let v = Dx.[row, col]
                 if v <> 0. then
                     let W = Ws.[row]
                     IJV.[row, col] <- v * W.[0, 0]
-                    IJV.[row, col + points.Length] <- v* W.[0, 1]
+                    //IJV.[row, col + points.Length] <- v* W.[0, 1]
                     IJV.[row + 2 * triangles.Length, col] <- v * W.[1, 0]
-                    IJV.[row + 2 * triangles.Length, col +  points.Length] <- v * W.[1, 1]
+                    //IJV.[row + 2 * triangles.Length, col +  points.Length] <- v * W.[1, 1]
         for row in 0..Dy.RowCount - 1 do
             for col in 0..Dy.ColumnCount - 1 do
                 let v = Dx.[row, col]
                 let W = Ws.[row]
                 if v <> 0. then
                     IJV.[row + triangles.Length, col] <- v * W.[0, 0]
-                    IJV.[row + triangles.Length, col + points.Length] <- v * W.[0, 1]
+                    //IJV.[row + triangles.Length, col + points.Length] <- v * W.[0, 1]
                     IJV.[row + 3 * triangles.Length, col] <- v * W.[1, 0]
-                    IJV.[row + 3 * triangles.Length, col +  points.Length] <- v * W.[1, 1]
+                    //IJV.[row + 3 * triangles.Length, col +  points.Length] <- v * W.[1, 1]
         IJV
 
     let build_linear_system (Dx:Matrix<float>) (Dy:Matrix<float>) (W_and_R:(Matrix<float> * Matrix<float>) array)=
@@ -120,16 +120,16 @@ let SLIM (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (t
 
         for kv in border_point do
             A.[kv.Key, kv.Key] <- A.[kv.Key, kv.Key] + 1.
-            A.[kv.Key + points.Length, kv.Key + points.Length] <- A.[kv.Key + points.Length, kv.Key + points.Length] + 1.
+            //A.[kv.Key + points.Length, kv.Key + points.Length] <- A.[kv.Key + points.Length, kv.Key + points.Length] + 1.
             rhs.[kv.Key] <- rhs.[kv.Key] + kv.Value.X
-            rhs.[kv.Key + points.Length] <- rhs.[kv.Key + points.Length] + kv.Value.Y
+            //rhs.[kv.Key + points.Length] <- rhs.[kv.Key + points.Length] + kv.Value.Y
 
         printfn "A:%A" A
-        printfn "RHS: %A" rhs
+        printfn "RHS: %A" (rhs.AsArray())
         let res = A.Solve(rhs)
         let us = res.[..points.Length - 1]
-        let vs = res.[points.Length - 1..]
-        let reshaped = [| for i in 0..points.Length - 1 -> Vector2D(us.[i], vs.[i]) |]
+        //let vs = res.[points.Length - 1..]
+        let reshaped = [| for i in 0..points.Length - 1 -> Vector2D(us.[i], us.[i]) |]
         printfn "%A" reshaped
         reshaped
 
