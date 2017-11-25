@@ -44,16 +44,20 @@ let SLIM (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (t
     let get_closest_transform (J:Matrix<float>) =
         let svd_res = svd J
         let sing = svd_res.S
-        let s0, s1 = sing.[0], sing.[1]
-        let s0cub = s0 * s0 * s0
-        let s1cub = s1 * s1 * s1
-        let s0_g = 2. * (s0 - 1. / s0cub)
-        let s1_g = 2. * (s1 - 1. / s1cub)
-        let news0 = sqrt (s0_g / (2. * (s0 - 1.)))
-        let news1 = sqrt (s1_g / (2. * (s1 - 1.)))
-        let diags = CreateMatrix.DenseOfDiagonalVector(CreateVector.DenseOfArray[|news0; news1|])
+        //printfn "J: %A" J
+        //printfn "s: %A" sing
+        //let s0, s1 = sing.[0], sing.[1]
+        //let s0cub = s0 * s0 * s0
+        //let s1cub = s1 * s1 * s1
+        //let s0_g = 2. * (s0 - 1. / s0cub)
+        //let s1_g = 2. * (s1 - 1. / s1cub)
+        //let news0 = sqrt (s0_g / (2. * (s0 - 1.)))
+        //let news1 = sqrt (s1_g / (2. * (s1 - 1.)))
+        let diags = CreateMatrix.DenseOfDiagonalVector(CreateVector.DenseOfArray[|1.; 1.|])
         let MatW = svd_res.U * diags * (svd_res.U.Transpose ())
         let R = svd_res.U * svd_res.VT
+        printfn "W: %A" MatW
+        printfn "R: %A" R
         MatW, R
 
     let buildA (Dx:Matrix<float>) (Dy:Matrix<float>) (Ws:Matrix<float> array) =
@@ -72,10 +76,10 @@ let SLIM (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (t
                 let v = Dx.[row, col]
                 let W = Ws.[row]
                 if v <> 0. then
-                    IJV.[row, col] <- IJV.[row, col] + v * W.[0, 0]
-                    IJV.[row, col + points.Length] <- IJV.[row, col + points.Length] + v * W.[0, 1]
-                    IJV.[row + 2 * triangles.Length, col] <- IJV.[row + 2 * triangles.Length, col] + v * W.[1, 0]
-                    IJV.[row + 2 * triangles.Length, col +  points.Length] <- IJV.[row + 2 * triangles.Length, col +  points.Length] + v * W.[1, 1]
+                    IJV.[row + triangles.Length, col] <- IJV.[row, col]
+                    IJV.[row + triangles.Length, col + points.Length] <- v * W.[0, 1]
+                    IJV.[row + 3 * triangles.Length, col] <- v * W.[1, 0]
+                    IJV.[row + 3 * triangles.Length, col +  points.Length] <- v * W.[1, 1]
         IJV
 
     let build_linear_system (Dx:Matrix<float>) (Dy:Matrix<float>) (W_and_R:(Matrix<float> * Matrix<float>) array)=
@@ -91,7 +95,7 @@ let SLIM (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (t
                 rhs.[tri + 2 * trilength] <- tmp.[1, 0]
                 rhs.[tri + 3 * trilength] <- tmp.[1, 1]
             rhs
-        A, rhs
+        (A.Transpose () * A), (A.Transpose () * rhs)
 
     let Dx = CreateMatrix.Dense<float>(triangles.Length, points.Length)
     let Dy = CreateMatrix.Dense<float>(triangles.Length, points.Length)
@@ -109,19 +113,23 @@ let SLIM (points : Vector3D array) (border_point: IDictionary<int, Vector2D>) (t
         let W_and_R = 
             [| for i in 0..triangles.Length - 1 ->
                 let J = compute_jacobians (Dx.Row(i)) (Dy.Row(i)) current_u current_v
-                printfn "%A -> %A" i J
-                let r = get_closest_transform J
-                printfn "%A" r
-                r|]
+                get_closest_transform J |]
         let A, rhs = build_linear_system Dx Dy W_and_R
+
+        for kv in border_point do
+            A.[kv.Key, kv.Key] <- A.[kv.Key, kv.Key] + 1.
+            A.[kv.Key + points.Length, kv.Key + points.Length] <- A.[kv.Key + points.Length, kv.Key + points.Length] + 1.
+            rhs.[kv.Key] <- rhs.[kv.Key] + kv.Value.X
+            rhs.[kv.Key + points.Length] <- rhs.[kv.Key + points.Length] + kv.Value.Y
+
         printfn "A:%A" A
         printfn "RHS: %A" rhs
         let res = A.Solve(rhs)
-        let reshaped = [| for row in 0..res.Count - 1 -> Vector2D(res.[row], res.[row]) |]
+        let us = res.[..points.Length - 1]
+        let vs = res.[points.Length - 1..]
+        let reshaped = [| for i in 0..points.Length - 1 -> Vector2D(us.[i], vs.[i]) |]
         printfn "%A" reshaped
         reshaped
-
-        //reshaped
 
     iterations
 
